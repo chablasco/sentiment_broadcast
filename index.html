@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentiment Broadcast</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #07070d;
+      font-family: "Courier New", monospace;
+    }
+
+    #ticker {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ticker-row {
+      width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .ticker-inner {
+      display: inline-block;
+      white-space: nowrap;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      will-change: transform;
+      animation: ticker-scroll linear infinite;
+    }
+
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .ticker-inner.fade-in {
+      animation: fade-in 2s ease forwards, ticker-scroll linear infinite;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+<div id="ticker"></div>
+<script>
+  // ─────────────────────────────────────────────
+  // Demo headlines — shown immediately, replaced by live data
+  // ─────────────────────────────────────────────
+
+  const DEMO = [
+    { title: "Global leaders reach landmark climate agreement", moral: 9.1 },
+    { title: "Armed conflict escalates in disputed border region", moral: 0.8 },
+    { title: "Scientists develop breakthrough treatment for rare disease", moral: 8.7 },
+    { title: "Corruption scandal rocks national government", moral: 1.2 },
+    { title: "Community volunteers rebuild homes after flooding", moral: 8.3 },
+    { title: "Tech firm accused of mass surveillance of citizens", moral: 0.5 },
+    { title: "New education fund reaches one million children", moral: 9.4 },
+    { title: "Oil spill threatens coastal ecosystem", moral: 1.5 },
+    { title: "Doctors without borders expands operations in war zones", moral: 8.9 },
+    { title: "Political prisoner released after international pressure", moral: 7.6 },
+    { title: "Hackers expose medical records of millions", moral: 0.9 },
+    { title: "Renewable energy overtakes fossil fuels in national grid", moral: 8.2 },
+    { title: "Child labor uncovered in global supply chains", moral: 0.4 },
+    { title: "Peace talks resume between long-standing rivals", moral: 7.8 },
+    { title: "Wildfires displace thousands across drought-hit region", moral: 2.1 },
+  ];
+
+  const SPEEDS = [
+    90, 105, 80, 115, 95, 88, 110, 100, 85, 120,
+    92, 108, 78, 98, 112, 86, 102, 118, 93, 107,
+    82, 96, 111, 75, 122
+  ];
+
+  // ─────────────────────────────────────────────
+  // Moral color scale  0 (red) → 5 (amber) → 10 (green)
+  // ─────────────────────────────────────────────
+
+  function moralColor(moral) {
+    const t   = Math.max(0, Math.min(10, moral)) / 10;
+    const hue = t < 0.5
+      ? t * 2 * 40
+      : 40 + (t - 0.5) * 2 * 88;
+    const sat = 72;
+    const lit = 58 - t * 10;
+    return `hsl(${hue.toFixed(1)}, ${sat}%, ${lit.toFixed(1)}%)`;
+  }
+
+  function makeText(title) {
+    const chunk = Array(10).fill(title).join('   ·   ') + '   ·   ';
+    return chunk + chunk;
+  }
+
+  // ─────────────────────────────────────────────
+  // Ticker
+  // ─────────────────────────────────────────────
+
+  const rowData = [];
+
+  function rowHeight() { return Math.max(28, Math.floor(window.innerHeight / 20)); }
+
+  function buildTicker() {
+    const ticker   = document.getElementById('ticker');
+    const count    = Math.max(4, Math.floor(window.innerHeight / rowHeight()));
+    const fontSize = Math.min(1.1, Math.max(0.65, rowHeight() / 38)) + 'rem';
+
+    while (rowData.length > count) rowData.pop().row.remove();
+
+    while (rowData.length < count) {
+      const i     = rowData.length;
+      const demo  = DEMO[i % DEMO.length];
+      const speed = SPEEDS[i % SPEEDS.length];
+
+      const row   = document.createElement('div');
+      row.className = 'ticker-row';
+
+      const inner = document.createElement('span');
+      inner.className = 'ticker-inner';
+      inner.style.color             = moralColor(demo.moral);
+      inner.style.fontSize          = fontSize;
+      inner.style.opacity           = '1';
+      inner.style.animationDuration = `${speed}s`;
+      inner.style.animationDelay    = `-${((i * speed) / count).toFixed(1)}s`;
+      inner.textContent             = makeText(demo.title);
+
+      row.appendChild(inner);
+      ticker.appendChild(row);
+      rowData.push({ row, inner, speed, age: i });
+    }
+
+    rowData.forEach(rd => { rd.inner.style.fontSize = fontSize; });
+  }
+
+  function updateTicker(headlines) {
+    if (!headlines?.length) return;
+
+    rowData.forEach(rd => rd.age++);
+
+    const sorted    = [...rowData].sort((a, b) => b.age - a.age);
+    const toReplace = sorted.slice(0, headlines.length);
+    const shuffled  = [...headlines].sort(() => Math.random() - 0.5);
+
+    toReplace.forEach((rd, i) => {
+      const h     = shuffled[i % shuffled.length];
+      const moral = typeof h.moral === 'number' ? h.moral : (h.score + 1) / 2 * 10;
+
+      const inner = rd.inner;
+      inner.classList.remove('fade-in');
+      void inner.offsetWidth;
+      inner.textContent             = makeText(h.title);
+      inner.style.color             = moralColor(moral);
+      inner.style.animationDuration = `${rd.speed}s`;
+      inner.style.animationDelay    = '0s';
+      inner.classList.add('fade-in');
+      setTimeout(() => inner.classList.remove('fade-in'), 2100);
+
+      rd.age = 0;
+    });
+  }
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildTicker, 180);
+  });
+
+  document.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // WebSocket — overlays live data when backend is up
+  // ─────────────────────────────────────────────
+
+  function connectWS() {
+    let ws;
+    try { ws = new WebSocket("ws://localhost:8000/ws"); } catch(e) { return; }
+
+    ws.onmessage = async (event) => {
+      const data  = JSON.parse(event.data);
+      if (data.sample_headlines?.length) updateTicker(data.sample_headlines);
+    };
+
+    ws.onclose = () => setTimeout(connectWS, 5000);
+    ws.onerror = () => { ws.close(); };
+  }
+
+  // ─────────────────────────────────────────────
+  // Boot
+  // ─────────────────────────────────────────────
+
+  buildTicker();
+  connectWS();
+</script>
+</body>
+</html>
